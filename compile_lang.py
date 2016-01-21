@@ -9,7 +9,7 @@ class CompilerBase(object):
   DIR = '/tmp'
 
   def __init__(self, code=''):
-      self.code = str(code)
+      self.code = code
 
   def compile_code(self):
       print('doing nothing')
