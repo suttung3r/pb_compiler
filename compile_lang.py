@@ -6,6 +6,15 @@ import subprocess
 
 from subprocess import CalledProcessError
 
+class CompilerException(Exception):
+
+  def __init__(self, ret, text):
+      self.ret = ret
+      self.text = text
+
+  def __str__(self):
+      return repr(self)
+
 class CompilerBase(object):
 
   DIR = '/tmp'
@@ -25,16 +34,14 @@ class C_Compiler(CompilerBase):
         super().__init__(code)
 
     def compile_code(self):
-        ret = -1
         with tempfile.NamedTemporaryFile(suffix=C_Compiler.SUFFIX, dir=CompilerBase.DIR) as f:
             f.write(bytes(self.code, 'UTF-8'))
             f.flush()
             f.seek(0)
             try:
-                ret = subprocess.check_call([C_Compiler.COMPILER, f.name])
+                subprocess.check_call([C_Compiler.COMPILER, f.name])
             except CalledProcessError as e:
-                ret = e.returncode
-        return ret
+                raise CompilerException(e.returncode, self.code)
 
 def run_compiler(lang, text):
 
@@ -48,6 +55,8 @@ if __name__ == '__main__':
     res = run_compiler('C', sample_c_prog)
     print('ran compiler with result {}'.format(res))
     # Missing semi-colon after return
-    bad_c_prog = '#include "stdio.h"\nint main() { return 0}';
-    res = run_compiler('C', bad_c_prog)
-    print('ran compiler with result {}'.format(res))
+    try:
+        bad_c_prog = '#include "stdio.h"\nint main() { return 0}';
+        res = run_compiler('C', bad_c_prog)
+    except CompilerException as e:
+        print('ran compiler with result {}'.format(e.ret))
