@@ -8,9 +8,10 @@ from subprocess import CalledProcessError
 
 class CompilerException(Exception):
 
-  def __init__(self, ret, text):
+  def __init__(self, ret, text, output):
       self.ret = ret
       self.text = text
+      self.output = output
 
   def __str__(self):
       return repr(self)
@@ -39,9 +40,9 @@ class C_Compiler(CompilerBase):
             f.flush()
             f.seek(0)
             try:
-                subprocess.check_call([C_Compiler.COMPILER, f.name])
+                subprocess.check_output([C_Compiler.COMPILER, f.name], stderr=subprocess.STDOUT)
             except CalledProcessError as e:
-                raise CompilerException(e.returncode, self.code)
+                raise CompilerException(e.returncode, self.code, e.output)
 
 def run_compiler(lang, text):
 
@@ -59,4 +60,4 @@ if __name__ == '__main__':
         bad_c_prog = '#include "stdio.h"\nint main() { return 0}';
         res = run_compiler('C', bad_c_prog)
     except CompilerException as e:
-        print('ran compiler with result {}'.format(e.ret))
+        print('ran compiler with result {} output {}'.format(e.ret, e.output))
