@@ -53,7 +53,7 @@ def run_compiler(lang, text):
         compiler = C_Compiler(text)
     return compiler.compile_code()
 
-if __name__ == '__main__':
+def main():
     sample_c_prog = '#include "stdio.h"\nint main() { return 0;}';
     run_compiler('C', sample_c_prog)
     print('ran compiler successfully {}')
@@ -63,3 +63,6 @@ if __name__ == '__main__':
         res = run_compiler('C', bad_c_prog)
     except CompilerException as e:
         print('ran compiler with result {} output {}'.format(e.ret, e.output))
+
+if __name__ == '__main__':
+    main()
