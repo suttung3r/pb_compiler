@@ -1,17 +1,18 @@
 #! /usr/bin/env python3
 
+from enum import Enum, unique
 import os
 import tempfile
 import subprocess
 
 from subprocess import CalledProcessError
 
-SUPPORTED_LANGUAGES = {
-  'C' : 'C',
-  'CPP' : 'CPP',
-  'PYTHON' : 'PYTHON',
-  'RUST' : 'RUST',
-}
+@unique
+class SUPPORTED_LANGUAGES(Enum):
+  C = 0,
+  CPP = 1,
+  PYTHON = 2,
+  RUST = 3
 
 class CompilerException(Exception):
 
@@ -56,18 +57,18 @@ class C_Compiler(CompilerBase):
 def run_compiler(lang, text):
 
     compiler = CompilerBase(text)
-    if lang == SUPPORTED_LANGUAGES['C']:
+    if lang == SUPPORTED_LANGUAGES.C:
         compiler = C_Compiler(text)
     return compiler.compile_code()
 
 def main():
     sample_c_prog = '#include "stdio.h"\nint main() { return 0;}';
-    run_compiler(SUPPORTED_LANGUAGES['C'], sample_c_prog)
+    run_compiler(SUPPORTED_LANGUAGES.C, sample_c_prog)
     print('ran compiler successfully {}')
     # Missing semi-colon after return
     try:
         bad_c_prog = '#include "stdio.h"\nint main() { return 0}';
-        res = run_compiler(SUPPORTED_LANGUAGES['C'], bad_c_prog)
+        res = run_compiler(SUPPORTED_LANGUAGES.C, bad_c_prog)
     except CompilerException as e:
         print('ran compiler with result {} output {}'.format(e.ret, e.output))
 
