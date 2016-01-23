@@ -26,7 +26,7 @@ class CompilerException(Exception):
 
 class CompilerBase(object):
 
-  def __init__(self, code='', tempdir='/tmp'):
+  def __init__(self, code='', tempdir='/tmp', *args, **kwargs):
       self.code = code
       self.tempdir = tempdir
 
@@ -38,8 +38,8 @@ class C_Compiler(CompilerBase):
     COMPILER = 'gcc'
     SUFFIX = '.c'
 
-    def __init__(self, code, out_fname='b.out'):
-        super().__init__(code)
+    def __init__(self, out_fname='b.out', *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.out_fname = out_fname
 
     def compile_code(self, rm_exe=True):
@@ -60,7 +60,7 @@ def run_compiler(lang, text):
 
     compiler = CompilerBase(text)
     if lang == SUPPORTED_LANGUAGES.C:
-        compiler = C_Compiler(text)
+        compiler = C_Compiler(code=text)
     return compiler.compile_code()
 
 def main():
