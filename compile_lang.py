@@ -30,15 +30,16 @@ class C_Compiler(CompilerBase):
     COMPILER = 'gcc'
     SUFFIX = '.c'
 
-    def __init__(self, code):
+    def __init__(self, code, out_fname='b.out'):
         super().__init__(code)
+        self.out_fname = out_fname
 
     def compile_code(self):
         with tempfile.NamedTemporaryFile(suffix=C_Compiler.SUFFIX, dir=self.tempdir) as f:
             f.write(bytes(self.code, 'UTF-8'))
             f.flush()
             f.seek(0)
-            output_fname = os.path.join(self.tempdir, 'a.out')
+            output_fname = os.path.join(self.tempdir, self.out_fname)
             try:
                 subprocess.check_output([C_Compiler.COMPILER, f.name, '-o', output_fname],
                                         stderr=subprocess.STDOUT)
