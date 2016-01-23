@@ -42,7 +42,7 @@ class C_Compiler(CompilerBase):
         super().__init__(code)
         self.out_fname = out_fname
 
-    def compile_code(self):
+    def compile_code(self, rm_exe=True):
         with tempfile.NamedTemporaryFile(suffix=C_Compiler.SUFFIX, dir=self.tempdir) as f:
             f.write(bytes(self.code, 'UTF-8'))
             f.flush()
@@ -51,6 +51,8 @@ class C_Compiler(CompilerBase):
             try:
                 subprocess.check_output([C_Compiler.COMPILER, f.name, '-o', output_fname],
                                         stderr=subprocess.STDOUT)
+                if rm_exe is True:
+                    os.remove(output_fname)
             except CalledProcessError as e:
                 raise CompilerException(e.returncode, self.code, e.output)
 
