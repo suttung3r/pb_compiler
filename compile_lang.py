@@ -18,10 +18,9 @@ class CompilerException(Exception):
 
 class CompilerBase(object):
 
-  DIR = '/tmp'
-
-  def __init__(self, code=''):
+  def __init__(self, code='', tempdir='/tmp'):
       self.code = code
+      self.tempdir = tempdir
 
   def compile_code(self):
       """Return standard unix return code"""
@@ -35,12 +34,14 @@ class C_Compiler(CompilerBase):
         super().__init__(code)
 
     def compile_code(self):
-        with tempfile.NamedTemporaryFile(suffix=C_Compiler.SUFFIX, dir=CompilerBase.DIR) as f:
+        with tempfile.NamedTemporaryFile(suffix=C_Compiler.SUFFIX, dir=self.tempdir) as f:
             f.write(bytes(self.code, 'UTF-8'))
             f.flush()
             f.seek(0)
+            output_fname = os.path.join(self.tempdir, 'a.out')
             try:
-                subprocess.check_output([C_Compiler.COMPILER, f.name], stderr=subprocess.STDOUT)
+                subprocess.check_output([C_Compiler.COMPILER, f.name, '-o', output_fname],
+                                        stderr=subprocess.STDOUT)
             except CalledProcessError as e:
                 raise CompilerException(e.returncode, self.code, e.output)
 
@@ -53,8 +54,8 @@ def run_compiler(lang, text):
 
 if __name__ == '__main__':
     sample_c_prog = '#include "stdio.h"\nint main() { return 0;}';
-    res = run_compiler('C', sample_c_prog)
-    print('ran compiler with result {}'.format(res))
+    run_compiler('C', sample_c_prog)
+    print('ran compiler successfully {}')
     # Missing semi-colon after return
     try:
         bad_c_prog = '#include "stdio.h"\nint main() { return 0}';
