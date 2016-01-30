@@ -43,36 +43,57 @@ class C_Compiler(CompilerBase):
         self.out_fname = out_fname
 
     def compile_code(self, rm_exe=True):
-        with tempfile.NamedTemporaryFile(suffix=C_Compiler.SUFFIX, dir=self.tempdir) as f:
+        with tempfile.NamedTemporaryFile(suffix=self.__class__.SUFFIX, dir=self.tempdir) as f:
             f.write(bytes(self.code, 'UTF-8'))
             f.flush()
             f.seek(0)
             output_fname = os.path.join(self.tempdir, self.out_fname)
             try:
-                subprocess.check_output([C_Compiler.COMPILER, f.name, '-o', output_fname],
+                subprocess.check_output([self.__class__.COMPILER, f.name, '-o', output_fname],
                                         stderr=subprocess.STDOUT)
                 if rm_exe is True:
                     os.remove(output_fname)
             except CalledProcessError as e:
                 raise CompilerException(e.returncode, self.code, e.output)
 
+class CPP_Compiler(C_Compiler):
+    COMPILER = 'g++'
+    SUFFIX = '.cpp'
+
+    def __init__(self, out_fname='b.out', *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.compiler = CPP_Compiler.COMPILER
+        self.suffix = CPP_Compiler.SUFFIX
+
 def run_compiler(lang, text):
 
     compiler = CompilerBase(text)
     if lang == SUPPORTED_LANGUAGES.C:
         compiler = C_Compiler(code=text)
+    elif lang == SUPPORTED_LANGUAGES.CPP:
+        compiler = CPP_Compiler(code=text)
     return compiler.compile_code()
 
 def main():
     sample_c_prog = '#include "stdio.h"\nint main() { return 0;}';
     run_compiler(SUPPORTED_LANGUAGES.C, sample_c_prog)
-    print('ran compiler successfully {}')
+    print('ran C compiler successfully {}')
     # Missing semi-colon after return
     try:
         bad_c_prog = '#include "stdio.h"\nint main() { return 0}';
         res = run_compiler(SUPPORTED_LANGUAGES.C, bad_c_prog)
     except CompilerException as e:
-        print('ran compiler with result {} output {}'.format(e.ret, e.output))
+        print('ran C compiler with result {} output {}'.format(e.ret, e.output))
+
+    cpp_prog = 'using namespace std;\n#include <iostream>\nint main() {cout << "hello world" << endl;}'
+    # verify breakage with c++
+    try:
+        res = run_compiler(SUPPORTED_LANGUAGES.C, cpp_prog)
+    except CompilerException as e:
+        print('ran C compiler with result {} output {}'.format(e.ret, e.output))
+
+    res = run_compiler(SUPPORTED_LANGUAGES.CPP, cpp_prog)
+    print('ran CPP compiler successfully {}')
 
 if __name__ == '__main__':
     main()
