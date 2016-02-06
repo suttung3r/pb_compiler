@@ -62,8 +62,14 @@ class CPP_Compiler(C_Compiler):
 
     def __init__(self, out_fname='b.out', *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.compiler = CPP_Compiler.COMPILER
-        self.suffix = CPP_Compiler.SUFFIX
+
+
+class Rust_Compiler(C_Compiler):
+    COMPILER = 'rustc'
+    SUFFIX = '.rs'
+
+    def __init__(self, out_fname='out', *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 def run_compiler(lang, text):
 
@@ -72,6 +78,8 @@ def run_compiler(lang, text):
         compiler = C_Compiler(code=text)
     elif lang == SUPPORTED_LANGUAGES.CPP:
         compiler = CPP_Compiler(code=text)
+    elif lang == SUPPORTED_LANGUAGES.RUST:
+        compiler = Rust_Compiler(code=text)
     return compiler.compile_code()
 
 def main():
@@ -94,6 +102,10 @@ def main():
 
     res = run_compiler(SUPPORTED_LANGUAGES.CPP, cpp_prog)
     print('ran CPP compiler successfully {}')
+
+    rust_prog = 'fn main() {\nprintln!("Hello, world");\n}'
+    res = run_compiler(SUPPORTED_LANGUAGES.RUST, rust_prog)
+    print('ran Rust compiler successfully {}')
 
 if __name__ == '__main__':
     main()
