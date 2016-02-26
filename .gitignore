@@ -1,3 +1,7 @@
 *.pyc
 __pycache__
 a.out
+*.swp
+pb_compiler_pb2.py
+dist/*
+pb_compiler.egg-info/*
