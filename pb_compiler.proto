@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+message DummyMsg {
+  enum Test {
+    ZERO = 0;
+    ONE = 1;
+    TWO = 2;
+  }
+  string hello = 1;
+  string goodbye = 2;
+  Test testnum = 3;
+}
+
+message RegisterCompilerService {
+  enum Language {
+    DEFAULT = 0;
+    C = 1;
+    CPP = 2;
+    RUST = 3;
+    PYTHON = 4;
+  }
+  Language lang = 1;
+  string version = 2;
+  string procarch = 3;
+}
+
+message CompileRequest {
+  string code = 1;
+}
+
+message CompileResult {
+  bool success = 1;
+}

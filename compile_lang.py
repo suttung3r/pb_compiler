@@ -1,18 +1,15 @@
 #! /usr/bin/env python3
 
-from enum import Enum, unique
 import os
 import tempfile
 import subprocess
+import zmq
 
 from subprocess import CalledProcessError
+# import pb_compiler as pb_compiler_pb2
+import pb_compiler_pb2, compile_lang_test
+from compile_lang_enums import SUPPORTED_LANGUAGES
 
-@unique
-class SUPPORTED_LANGUAGES(Enum):
-  C = 0,
-  CPP = 1,
-  PYTHON = 2,
-  RUST = 3
 
 class CompilerException(Exception):
 
@@ -71,6 +68,57 @@ class Rust_Compiler(C_Compiler):
     def __init__(self, out_fname='out', *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+
+class CompilerProducer():
+    PORT = 9002
+
+    def __init__(self, addr='127.0.0.1'):
+        print('inited')
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.ROUTER)
+        self.addr = addr
+        self.socket.bind('tcp://{addr}:{port}'.format(addr=self.addr, port=CompilerProducer.PORT))
+
+    def listen(self):
+        print('started')
+        reg_msg = pb_compiler_pb2.RegisterCompilerService()
+        address, empty, message = self.socket.recv_multipart()
+        print(message)
+        ret = reg_msg.MergeFromString(message)
+        print(reg_msg)
+
+    def dispatch_req(self, code, language):
+        pass
+
+    def __call__(self):
+        print('called')
+        while True:
+            self.listen()
+            pass
+
+
+class CompilerWorker():
+
+    def __init__(self, lang_type, compiler_version='noversion',
+                 procarch='novalue', addr='localhost'):
+        self.context = zmq.Context()
+        self.addr = addr
+        self.lang_type = lang_type
+        self.compiler_version = compiler_version
+        self.procarch = procarch
+        self.socket = self.context.socket(zmq.REQ)
+
+    def connect(self):
+        self.socket.connect('tcp://{addr}:{port}'.format(addr=self.addr, port=CompilerProducer.PORT))
+        reg = pb_compiler_pb2.RegisterCompilerService()
+        reg.lang = self.lang_type
+        reg.procarch = self.procarch
+        reg.version = self.compiler_version
+        self.socket.send(reg.SerializeToString())
+
+def try_messages():
+    clnt = CompilerWorker()
+
 def run_compiler(lang, text):
 
     compiler = CompilerBase(text)
@@ -83,28 +131,24 @@ def run_compiler(lang, text):
     return compiler.compile_code()
 
 def main():
-    sample_c_prog = '#include "stdio.h"\nint main() { return 0;}';
-    run_compiler(SUPPORTED_LANGUAGES.C, sample_c_prog)
-    print('ran C compiler successfully {}')
+    run_compiler(compile_lang_test.SampleCProg.lang, compile_lang_test.SampleCProg.code)
+    print('ran C compiler successfully')
     # Missing semi-colon after return
     try:
-        bad_c_prog = '#include "stdio.h"\nint main() { return 0}';
-        res = run_compiler(SUPPORTED_LANGUAGES.C, bad_c_prog)
+        run_compiler(compile_lang_test.BadCProg.lang, compile_lang_test.BadCProg.code)
     except CompilerException as e:
         print('ran C compiler with result {} output {}'.format(e.ret, e.output))
 
-    cpp_prog = 'using namespace std;\n#include <iostream>\nint main() {cout << "hello world" << endl;}'
     # verify breakage with c++
     try:
-        res = run_compiler(SUPPORTED_LANGUAGES.C, cpp_prog)
+        res = run_compiler(compile_lang_test.CPPToC.lang, compile_lang_test.CPPToC.code)
     except CompilerException as e:
         print('ran C compiler with result {} output {}'.format(e.ret, e.output))
 
-    res = run_compiler(SUPPORTED_LANGUAGES.CPP, cpp_prog)
+    res = run_compiler(compile_lang_test.SampleCPP.lang, compile_lang_test.SampleCPP.code)
     print('ran CPP compiler successfully {}')
 
-    rust_prog = 'fn main() {\nprintln!("Hello, world");\n}'
-    res = run_compiler(SUPPORTED_LANGUAGES.RUST, rust_prog)
+    res = run_compiler(compile_lang_test.RustProg.lang, compile_lang_test.RustProg.code)
     print('ran Rust compiler successfully {}')
 
 if __name__ == '__main__':
