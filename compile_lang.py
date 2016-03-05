@@ -3,6 +3,7 @@
 import os
 import tempfile
 import subprocess
+import time
 import zmq
 
 from subprocess import CalledProcessError
@@ -73,25 +74,47 @@ class CompilerProducer():
     PORT = 9002
 
     def __init__(self, addr='127.0.0.1'):
-        print('inited')
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.ROUTER)
         self.addr = addr
         self.socket.bind('tcp://{addr}:{port}'.format(addr=self.addr, port=CompilerProducer.PORT))
 
     def listen(self):
-        print('started')
         reg_msg = pb_compiler_pb2.RegisterCompilerService()
-        address, empty, message = self.socket.recv_multipart()
-        print(message)
+        address, message = self.socket.recv_multipart()
         ret = reg_msg.MergeFromString(message)
-        print(reg_msg)
+        self._add_compiler(reg_msg, address)
 
-    def dispatch_req(self, code, language):
-        pass
+    def dispatch_req(self, language, code):
+        worker_list = []
+        try:
+            worker_list_name = '{}'.format(language.name) + '_Workers'
+            print(worker_list_name)
+            worker_list = getattr(self, worker_list_name)
+        except AttributeError as e:
+            print('no worker support for {}'.format(language.name))
+        req = pb_compiler_pb2.CompileRequest()
+        req.code = code
+        self.socket.send_multipart([worker_list[0], req.SerializeToString()])
 
+    def _add_compiler(self, reg_msg, address):
+        try:
+            lang = reg_msg.Language.Name(reg_msg.lang)
+            worker_list_name = '{}'.format(lang) + '_Workers'
+            getattr(self, worker_list_name).append(address)
+            print('Adding {} worker'.format(lang))
+        except AttributeError as e:
+            print('Adding {} worker list'.format(lang))
+            setattr(self, worker_list_name, [])
+            getattr(self, worker_list_name).append(address)
+
+    def wait_for_worker(self, language):
+        worker_list_name = '{}'.format(language.name) + '_Workers'
+        while not hasattr(self, worker_list_name):
+            time.sleep(1)
+            pass
+        
     def __call__(self):
-        print('called')
         while True:
             self.listen()
             pass
@@ -106,7 +129,8 @@ class CompilerWorker():
         self.lang_type = lang_type
         self.compiler_version = compiler_version
         self.procarch = procarch
-        self.socket = self.context.socket(zmq.REQ)
+        self.codeq = Queue()
+        self.socket = self.context.socket(zmq.DEALER)
 
     def connect(self):
         self.socket.connect('tcp://{addr}:{port}'.format(addr=self.addr, port=CompilerProducer.PORT))
@@ -116,8 +140,31 @@ class CompilerWorker():
         reg.version = self.compiler_version
         self.socket.send(reg.SerializeToString())
 
-def try_messages():
-    clnt = CompilerWorker()
+    def wait_for_req(self):
+        request = pb_compiler_pb2.CompileRequest()
+        message = self.socket.recv()
+        ret = request.MergeFromString(message)
+        self.codeq.put(message)
+        print('req recv\'d {} ret {}'.format(request, ret))
+
+    def get_compile_req(self):
+        return self.codeq.get()
+
+    def __call__(self):
+        while True:
+            self.wait_for_req()
+
+class RemoteCCompiler():
+    def __init__(self):
+        self.worker = CompilerWorker(pb_compiler_pb2.RegisterCompilerService.C)
+        self.worker.connect()
+        self.worker_thread = Thread(target=worker)
+        self.worker_thread.start()
+
+    def run_compiler(self):
+        while True:
+            msg = self.worker.get_compile_req()
+            print(msg)
 
 def run_compiler(lang, text):
 
