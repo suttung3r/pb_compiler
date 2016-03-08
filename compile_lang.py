@@ -1,13 +1,14 @@
 #! /usr/bin/env python3
 
 import os
-import tempfile
+import queue
 import subprocess
+from subprocess import CalledProcessError
+import tempfile
+from threading import Thread
 import time
 import zmq
 
-from subprocess import CalledProcessError
-# import pb_compiler as pb_compiler_pb2
 import pb_compiler_pb2, compile_lang_test
 from compile_lang_enums import SUPPORTED_LANGUAGES
 
@@ -78,10 +79,19 @@ class CompilerProducer():
         self.socket = self.context.socket(zmq.ROUTER)
         self.addr = addr
         self.socket.bind('tcp://{addr}:{port}'.format(addr=self.addr, port=CompilerProducer.PORT))
+        self.worker_lists = []
+        self.result_q = queue.Queue()
 
     def listen(self):
-        reg_msg = pb_compiler_pb2.RegisterCompilerService()
         address, message = self.socket.recv_multipart()
+        for worker_list_name in self.worker_lists:
+            if address in getattr(self, worker_list_name):
+                resp_msg = pb_compiler_pb2.CompileResult()
+                ret = resp_msg.MergeFromString(message)
+                self._put_compile_result(resp_msg.success)
+                return
+        reg_msg = pb_compiler_pb2.RegisterCompilerService()
+        print('msg recv\'d {}'.format(message))
         ret = reg_msg.MergeFromString(message)
         self._add_compiler(reg_msg, address)
 
@@ -96,17 +106,23 @@ class CompilerProducer():
         req = pb_compiler_pb2.CompileRequest()
         req.code = code
         self.socket.send_multipart([worker_list[0], req.SerializeToString()])
+    def _put_compile_result(self, result):
+        self.result_q.put(result)
 
+    def get_compile_result(self):
+        return self.result_q.get()
+ 
     def _add_compiler(self, reg_msg, address):
+        lang = reg_msg.Language.Name(reg_msg.lang)
+        worker_list_name = '{}'.format(lang) + '_Workers'
         try:
-            lang = reg_msg.Language.Name(reg_msg.lang)
-            worker_list_name = '{}'.format(lang) + '_Workers'
             getattr(self, worker_list_name).append(address)
             print('Adding {} worker'.format(lang))
         except AttributeError as e:
             print('Adding {} worker list'.format(lang))
             setattr(self, worker_list_name, [])
             getattr(self, worker_list_name).append(address)
+            self.worker_lists.append(worker_list_name)
 
     def wait_for_worker(self, language):
         worker_list_name = '{}'.format(language.name) + '_Workers'
@@ -129,7 +145,7 @@ class CompilerWorker():
         self.lang_type = lang_type
         self.compiler_version = compiler_version
         self.procarch = procarch
-        self.codeq = Queue()
+        self.codeq = queue.Queue()
         self.socket = self.context.socket(zmq.DEALER)
 
     def connect(self):
@@ -141,30 +157,45 @@ class CompilerWorker():
         self.socket.send(reg.SerializeToString())
 
     def wait_for_req(self):
-        request = pb_compiler_pb2.CompileRequest()
         message = self.socket.recv()
-        ret = request.MergeFromString(message)
         self.codeq.put(message)
-        print('req recv\'d {} ret {}'.format(request, ret))
 
     def get_compile_req(self):
         return self.codeq.get()
+
+    def send_response(self, bytes_in):
+          self.socket.send(bytes_in)
 
     def __call__(self):
         while True:
             self.wait_for_req()
 
 class RemoteCCompiler():
-    def __init__(self):
-        self.worker = CompilerWorker(pb_compiler_pb2.RegisterCompilerService.C)
+    def __init__(self, compiler_version='noversion', procarch='noarch',
+                 addr='localhost'):
+        self.worker = CompilerWorker(pb_compiler_pb2.RegisterCompilerService.C, compiler_version=compiler_version, procarch=procarch, addr=addr)
         self.worker.connect()
-        self.worker_thread = Thread(target=worker)
+        self.worker_thread = Thread(target=self.worker)
         self.worker_thread.start()
 
     def run_compiler(self):
         while True:
+            print('waiting for request')
+            comp_req = pb_compiler_pb2.CompileRequest()
             msg = self.worker.get_compile_req()
-            print(msg)
+            comp_req.MergeFromString(msg)
+            print(comp_req.code)
+            compiler = C_Compiler(code=comp_req.code)
+            comp_res = pb_compiler_pb2.CompileResult()
+            comp_res.success = False
+            try:
+                compiler.compile_code()
+                comp_res.success = True
+                print('Compiler succeeded.')
+            except CompilerException as e:
+                print('Something failed')
+            self.worker.send_response(comp_res.SerializeToString())
+            print('Waiting for next req')
 
 def run_compiler(lang, text):
 
