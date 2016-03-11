@@ -5,11 +5,11 @@ import queue
 import subprocess
 from subprocess import CalledProcessError
 import tempfile
-from threading import Thread
 import time
 import zmq
 
-import pb_compiler_pb2, compile_lang_test
+import pb_compiler_pb2
+from test import compile_lang_test
 from compile_lang_enums import SUPPORTED_LANGUAGES
 
 
@@ -170,33 +170,6 @@ class CompilerWorker():
         while True:
             self.wait_for_req()
 
-class RemoteCCompiler():
-    def __init__(self, compiler_version='noversion', procarch='noarch',
-                 addr='localhost'):
-        self.worker = CompilerWorker(pb_compiler_pb2.RegisterCompilerService.C, compiler_version=compiler_version, procarch=procarch, addr=addr)
-        self.worker.connect()
-        self.worker_thread = Thread(target=self.worker)
-        self.worker_thread.start()
-
-    def run_compiler(self):
-        while True:
-            print('waiting for request')
-            comp_req = pb_compiler_pb2.CompileRequest()
-            msg = self.worker.get_compile_req()
-            comp_req.MergeFromString(msg)
-            print(comp_req.code)
-            compiler = C_Compiler(code=comp_req.code)
-            comp_res = pb_compiler_pb2.CompileResult()
-            comp_res.success = False
-            try:
-                compiler.compile_code()
-                comp_res.success = True
-                print('Compiler succeeded.')
-            except CompilerException as e:
-                print('Something failed')
-            self.worker.send_response(comp_res.SerializeToString())
-            print('Waiting for next req')
-
 def run_compiler(lang, text):
 
     compiler = CompilerBase(text)
@@ -215,19 +188,19 @@ def main():
     try:
         run_compiler(compile_lang_test.BadCProg.lang, compile_lang_test.BadCProg.code)
     except CompilerException as e:
-        print('ran C compiler with result {} output {}'.format(e.ret, e.output))
+        print('ran C compiler with result {}'.format(e.ret))
 
     # verify breakage with c++
     try:
         res = run_compiler(compile_lang_test.CPPToC.lang, compile_lang_test.CPPToC.code)
     except CompilerException as e:
-        print('ran C compiler with result {} output {}'.format(e.ret, e.output))
+        print('ran C compiler with result {}'.format(e.ret))
 
     res = run_compiler(compile_lang_test.SampleCPP.lang, compile_lang_test.SampleCPP.code)
-    print('ran CPP compiler successfully {}')
+    print('ran CPP compiler successfully')
 
     res = run_compiler(compile_lang_test.RustProg.lang, compile_lang_test.RustProg.code)
-    print('ran Rust compiler successfully {}')
+    print('ran Rust compiler successfully')
 
 if __name__ == '__main__':
     main()
