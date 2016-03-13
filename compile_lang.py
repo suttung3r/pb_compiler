@@ -26,7 +26,12 @@ class CompilerException(Exception):
       return repr(self)
 
 class CompilerBase(object):
+  """
+  Base object for compilers
 
+  Note tempdir constructor arg - this is one method of separating
+  outputs from different compilers running on the same host
+  """
   def __init__(self, code='', tempdir='/tmp', *args, **kwargs):
       self.code = code
       self.tempdir = tempdir
@@ -36,6 +41,12 @@ class CompilerBase(object):
       return 0
 
 class C_Compiler(CompilerBase):
+    """
+    C Compiler object. Wraps gcc by default
+
+    out_fname constructor arg allows specification of output filename
+    default is b.out to avoid conflict with standard gcc output
+    """
     COMPILER = 'gcc'
     SUFFIX = '.c'
 
