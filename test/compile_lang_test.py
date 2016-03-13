@@ -22,3 +22,8 @@ class SampleCPP(CPPToC):
 class RustProg(CompilerTest):
     code = 'fn main() {\nprintln!("Hello, world");\n}'
     lang = SUPPORTED_LANGUAGES.RUST
+
+class SampleCProg2(CompilerTest):
+    code = '#include "stdlib.h"\n#include "stdio.h"\nint main() { char test ="1";printf("%d", atoi(test));return 0;}'
+    lang = SUPPORTED_LANGUAGES.C
+

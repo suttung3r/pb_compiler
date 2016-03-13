@@ -1,6 +1,9 @@
+import logging
+import tempfile
 from threading import Thread
 
-from compile_lang import CompilerWorker, C_Compiler, Rust_Compiler
+from compile_lang import CompilerWorker, C_Compiler, Rust_Compiler, \
+  CPP_Compiler, CompilerException
 import pb_compiler_pb2
 
 
@@ -31,19 +34,20 @@ class RemoteCompiler():
     def run_compiler(self):
         self.worker.connect()
         while True:
-            print('waiting for request')
+            logging.info('waiting for request')
             comp_req = pb_compiler_pb2.CompileRequest()
             msg = self.worker.get_compile_req()
             comp_req.MergeFromString(msg)
-            print(comp_req.code)
-            compiler = RemoteCompiler.CompilerEnumToType[self.lang](code=comp_req.code)
+            tempdir = tempfile.mkdtemp()
+            compiler = RemoteCompiler.CompilerEnumToType[self.lang](code=comp_req.code, tempdir=tempdir)
             comp_res = pb_compiler_pb2.CompileResult()
             comp_res.success = False
             try:
                 compiler.compile_code()
                 comp_res.success = True
-                print('Compiler succeeded.')
             except CompilerException as e:
-                print('Something failed')
+                logging.info('Compilation failed')
             self.worker.send_response(comp_res.SerializeToString())
-            print('Waiting for next req')
+
+    def log(self, *args, **kwargs):
+        print('{}: '.format(pb_compiler_pb2.RegisterCompilerService.Language.Name(self.lang)) + ''.format(args, kwargs))

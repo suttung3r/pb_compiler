@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 
+import hashlib
+import logging
 import os
 import queue
 import subprocess
@@ -42,6 +44,7 @@ class C_Compiler(CompilerBase):
         self.out_fname = out_fname
 
     def compile_code(self, rm_exe=True):
+        logging.debug('{} compiling {}'.format(self.__class__.__name__, self.code))
         with tempfile.NamedTemporaryFile(suffix=self.__class__.SUFFIX, dir=self.tempdir) as f:
             f.write(bytes(self.code, 'UTF-8'))
             f.flush()
@@ -51,8 +54,10 @@ class C_Compiler(CompilerBase):
                 subprocess.check_output([self.__class__.COMPILER, f.name, '-o', output_fname],
                                         stderr=subprocess.STDOUT)
                 if rm_exe is True:
+                    logging.debug('{} removing output of {}'.format(self.__class__.__name__, self.code))
                     os.remove(output_fname)
             except CalledProcessError as e:
+                print('compilation failed')
                 raise CompilerException(e.returncode, self.code, e.output)
 
 class CPP_Compiler(C_Compiler):
@@ -72,6 +77,18 @@ class Rust_Compiler(C_Compiler):
 
 
 class CompilerProducer():
+    """
+    Producer object for compile jobs
+
+    Workers connect over ZMQ Router socket with language/version/processor arch info
+
+    ZMQ manages Producer/Worker relationship by assigning a unique address to each
+    worker that connects, even from the same host. These addresses are stored in a 
+    list of available workers.
+
+    Workers perform compile jobs atomically. So a result from a given worker is
+    guaranteed to be that of the least-recently dispatched job.
+    """
     PORT = 9002
 
     def __init__(self, addr='127.0.0.1'):
@@ -81,31 +98,48 @@ class CompilerProducer():
         self.socket.bind('tcp://{addr}:{port}'.format(addr=self.addr, port=CompilerProducer.PORT))
         self.worker_lists = []
         self.result_q = queue.Queue()
+        self.worker_q_set = {}
 
     def listen(self):
         address, message = self.socket.recv_multipart()
         for worker_list_name in self.worker_lists:
             if address in getattr(self, worker_list_name):
                 resp_msg = pb_compiler_pb2.CompileResult()
+                print('res msg recv\'d {} address {}'.format(message, address))
                 ret = resp_msg.MergeFromString(message)
-                self._put_compile_result(resp_msg.success)
+                self._put_compile_result((self.worker_q_set[address].pop(0), resp_msg.success))
                 return
         reg_msg = pb_compiler_pb2.RegisterCompilerService()
-        print('msg recv\'d {}'.format(message))
+        print('reg msg recv\'d {} address {}'.format(message, address))
         ret = reg_msg.MergeFromString(message)
         self._add_compiler(reg_msg, address)
 
     def dispatch_req(self, language, code):
+        """
+        Dispatch a compile request
+
+        Returns the md5 sum of the message sent and the worker address. This is
+        for client management of the requests. In theory, some sort of caching
+        could be performed if the same request is going to the same client frequently
+        enough.
+
+        Returns 0 if no worker of the desired type is available
+        """
         worker_list = []
         try:
             worker_list_name = '{}'.format(language.name) + '_Workers'
-            print(worker_list_name)
             worker_list = getattr(self, worker_list_name)
         except AttributeError as e:
             print('no worker support for {}'.format(language.name))
+            return 0
         req = pb_compiler_pb2.CompileRequest()
         req.code = code
-        self.socket.send_multipart([worker_list[0], req.SerializeToString()])
+        msg = req.SerializeToString()
+        self.socket.send_multipart([worker_list[0], msg])
+        m = hashlib.md5(worker_list[0] + msg).hexdigest()
+        self.worker_q_set[worker_list[0]].append(m)
+        return m
+
     def _put_compile_result(self, result):
         self.result_q.put(result)
 
@@ -123,6 +157,7 @@ class CompilerProducer():
             setattr(self, worker_list_name, [])
             getattr(self, worker_list_name).append(address)
             self.worker_lists.append(worker_list_name)
+            self.worker_q_set[address] = []
 
     def wait_for_worker(self, language):
         worker_list_name = '{}'.format(language.name) + '_Workers'
@@ -137,6 +172,14 @@ class CompilerProducer():
 
 
 class CompilerWorker():
+
+    """
+    Remote worker objects for CompilerProducer
+
+    Handles socket management. Performs initial connection request upon calling
+    connect method. Then waits for jobs from producer object in separate thread.
+    Received requests are placed on queue for consumption by client.
+    """
 
     def __init__(self, lang_type, compiler_version='noversion',
                  procarch='novalue', addr='localhost'):
@@ -184,17 +227,19 @@ def run_compiler(lang, text):
 def main():
     run_compiler(compile_lang_test.SampleCProg.lang, compile_lang_test.SampleCProg.code)
     print('ran C compiler successfully')
+    run_compiler(compile_lang_test.SampleCProg2.lang, compile_lang_test.SampleCProg2.code)
+    print('ran C compiler successfully again w/stdlib')
     # Missing semi-colon after return
     try:
         run_compiler(compile_lang_test.BadCProg.lang, compile_lang_test.BadCProg.code)
     except CompilerException as e:
-        print('ran C compiler with result {}'.format(e.ret))
+        print('C compiler failed with result {}'.format(e.ret))
 
     # verify breakage with c++
     try:
         res = run_compiler(compile_lang_test.CPPToC.lang, compile_lang_test.CPPToC.code)
     except CompilerException as e:
-        print('ran C compiler with result {}'.format(e.ret))
+        print('C compiler failed with result {}'.format(e.ret))
 
     res = run_compiler(compile_lang_test.SampleCPP.lang, compile_lang_test.SampleCPP.code)
     print('ran CPP compiler successfully')
