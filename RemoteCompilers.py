@@ -26,10 +26,11 @@ class RemoteCompiler():
 
     def __init__(self, lang, compiler_version='noversion', procarch='noarch',
                  addr='localhost'):
-        self.worker = CompilerWorker(lang, compiler_version=compiler_version, procarch=procarch, addr=addr)
+        self.lang = lang
+        compiler = RemoteCompiler.CompilerEnumToType[self.lang](code='', tempdir='/tmp')
+        self.worker = CompilerWorker(lang, compiler_version=compiler.get_version(), procarch=procarch, addr=addr)
         self.worker_thread = Thread(target=self.worker)
         self.worker_thread.start()
-        self.lang = lang
 
     def run_compiler(self):
         self.worker.connect()

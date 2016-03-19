@@ -40,6 +40,10 @@ class CompilerBase(object):
       """Return standard unix return code"""
       return 0
 
+  def get_version(self):
+      """Return None. Meant to be overridden."""
+      return None
+
 class C_Compiler(CompilerBase):
     """
     C Compiler object. Wraps gcc by default
@@ -53,6 +57,12 @@ class C_Compiler(CompilerBase):
     def __init__(self, out_fname='b.out', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.out_fname = out_fname
+
+    def get_version(self):
+        res = subprocess.check_output([self.__class__.COMPILER, '--version'],
+                                      stderr=subprocess.STDOUT)
+        # gcc useful version output is first line
+        return res.splitlines()[0]
 
     def compile_code(self, rm_exe=True):
         logging.debug('{} compiling {}'.format(self.__class__.__name__, self.code))
