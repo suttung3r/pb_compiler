@@ -144,7 +144,7 @@ class CompilerProducer():
         could be performed if the same request is going to the same client frequently
         enough.
 
-        Returns 0 if no worker of the desired type is available
+        Returns -1 if no worker of the desired type is available
         """
         worker_list = []
         try:
@@ -152,7 +152,7 @@ class CompilerProducer():
             worker_list = getattr(self, worker_list_name)
         except AttributeError as e:
             print('no worker support for {}'.format(language.name))
-            return 0
+            return -1
         req = pb_compiler_pb2.CompileRequest()
         req.code = code
         msg = req.SerializeToString()
